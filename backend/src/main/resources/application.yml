@@ -1,0 +1,37 @@
+spring:
+  profiles:
+    active: local   # 로컬 개발 시 application-local.yml 활성화
+
+  # JPA 공통 설정
+  jpa:
+    open-in-view: false          # OSIV 비활성화 — 트랜잭션 경계를 Service 계층으로 제한
+    properties:
+      hibernate:
+        format_sql: true         # 콘솔 SQL 가독성 향상
+        default_batch_fetch_size: 100  # N+1 방지용 IN 절 배치 크기
+
+# JWT 설정
+# ⚠️ jwt.secret은 운영 환경에서 반드시 환경 변수(JWT_SECRET)로 교체할 것
+# 기본값은 로컬 개발 전용 (32자 이상 = HS256 최소 요건 충족)
+jwt:
+  secret: ${JWT_SECRET:majungmul-dev-secret-key-must-be-32-chars-min!}
+  access-token-expiry: 3600000       # 액세스 토큰 유효기간: 1시간 (밀리초)
+  refresh-token-expiry: 2592000000   # 리프레시 토큰 유효기간: 30일 (밀리초)
+
+# Swagger UI 경로: http://localhost:8080/swagger-ui/index.html
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+# 서버 기본 포트
+server:
+  port: 8080
+
+# 로깅
+logging:
+  level:
+    com.majungmul: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE  # 바인딩 파라미터 출력 (개발 환경)
