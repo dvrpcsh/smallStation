@@ -32,4 +32,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @param nickname 중복 확인할 닉네임
      */
     boolean existsByNicknameAndIsDeletedFalse(String nickname);
+
+    /** 기기 ID 기반 사용자 존재 여부 확인 — 익명 로그인에서 신규/기존 분기에 사용 */
+    boolean existsByDeviceIdAndIsDeletedFalse(String deviceId);
 }
