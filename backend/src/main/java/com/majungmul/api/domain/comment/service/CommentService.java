@@ -4,6 +4,8 @@ import com.majungmul.api.domain.comment.dto.CommentCreateRequest;
 import com.majungmul.api.domain.comment.dto.CommentResponse;
 import com.majungmul.api.domain.comment.entity.Comment;
 import com.majungmul.api.domain.comment.repository.CommentRepository;
+import com.majungmul.api.domain.guardian.event.CrisisDetectedEvent;
+import com.majungmul.api.domain.guardian.event.CrisisSourceType;
 import com.majungmul.api.domain.post.entity.Post;
 import com.majungmul.api.domain.post.repository.PostRepository;
 import com.majungmul.api.domain.safety.dto.SafetyCheckResult;
@@ -14,6 +16,7 @@ import com.majungmul.api.global.common.exception.BusinessException;
 import com.majungmul.api.global.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +53,7 @@ public class CommentService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final SafetyFilterService safetyFilterService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ─────────────────────────────────────────────────────────────────
     // 댓글 목록 조회
@@ -117,28 +121,17 @@ public class CommentService {
         // ③ AI 세이프티 필터
         SafetyCheckResult safetyResult = safetyFilterService.check(request.content());
 
-        if (safetyResult.crisis()) {
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // [가디언 알림 확장 포인트] — Phase 3에서 구현 예정
-            //
-            // 댓글에서 위기 수준 키워드 감지 시 가디언 알림 트리거.
-            // 고립 청년이 댓글을 통해 극단적 감정을 표출할 때도 개입이 필요하다.
-            //
-            // 구현 방식 (PostService와 동일한 패턴 적용):
-            //   1. guardianAlertService.sendCrisisAlert(userId, safetyResult.matchedKeywords())
-            //   2. 또는 ApplicationEventPublisher 발행:
-            //      publisher.publishEvent(new CrisisDetectedEvent(userId, postId, "COMMENT"))
-            //
-            // guardianAlertService.sendCrisisAlert(userId, safetyResult.matchedKeywords());
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            log.warn("[Safety] 위기 수준 댓글 감지. userId={}, postId={}", userId, postId);
-        }
-
+        // ④ 댓글 저장 (위기 감지 시 차단 + 가디언 알림 발행)
         if (safetyResult.blocked()) {
+            if (safetyResult.crisis()) {
+                eventPublisher.publishEvent(
+                        new CrisisDetectedEvent(userId, postId, CrisisSourceType.COMMENT,
+                                safetyResult.matchedKeywords()));
+                log.warn("[Safety] 위기 수준 댓글 차단 및 가디언 알림 발행. userId={}, postId={}", userId, postId);
+            }
             throw new BusinessException(ErrorCode.POST_BLOCKED_BY_SAFETY);
         }
 
-        // ④ 댓글 저장
         Comment comment = Comment.create(post, author, request.content());
         Comment saved = commentRepository.save(comment);
         log.info("[Comment] 댓글 작성 완료. commentId={}, postId={}", saved.getId(), postId);

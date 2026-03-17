@@ -1,8 +1,10 @@
 package com.majungmul.api.domain.user.repository;
 
 import com.majungmul.api.domain.user.entity.User;
+import com.majungmul.api.domain.user.entity.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -35,4 +37,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 기기 ID 기반 사용자 존재 여부 확인 — 익명 로그인에서 신규/기존 분기에 사용 */
     boolean existsByDeviceIdAndIsDeletedFalse(String deviceId);
+
+    /**
+     * 특정 역할을 가진 활성 사용자 전체를 조회한다.
+     *
+     * <p>주요 사용처: {@code GuardianAlertListener}에서 GUARDIAN 역할 사용자 전체 조회.
+     *
+     * @param role      조회할 역할 (예: UserRole.GUARDIAN)
+     * @return 해당 역할의 활성 사용자 목록
+     */
+    List<User> findAllByRoleAndIsDeletedFalse(UserRole role);
 }

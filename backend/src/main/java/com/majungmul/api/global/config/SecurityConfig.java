@@ -65,8 +65,9 @@ public class SecurityConfig {
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(PUBLIC_URLS).permitAll()   // 공개 경로 — 인증 불필요
-                .anyRequest().authenticated()               // 그 외 — 유효한 JWT 필요
+                .requestMatchers(PUBLIC_URLS).permitAll()                        // 공개 경로 — 인증 불필요
+                .requestMatchers("/api/v1/guardian/**").hasRole("GUARDIAN")      // 가디언 전용 경로
+                .anyRequest().authenticated()                                    // 그 외 — 유효한 JWT 필요
             )
             // JWT 필터를 Spring Security의 기본 인증 필터 앞에 삽입
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

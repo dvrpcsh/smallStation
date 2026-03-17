@@ -1,6 +1,8 @@
 package com.majungmul.api.domain.post.service;
 
 import com.majungmul.api.domain.comment.repository.CommentRepository;
+import com.majungmul.api.domain.guardian.event.CrisisDetectedEvent;
+import com.majungmul.api.domain.guardian.event.CrisisSourceType;
 import com.majungmul.api.domain.post.dto.PostCreateRequest;
 import com.majungmul.api.domain.post.dto.PostResponse;
 import com.majungmul.api.domain.post.dto.PostSummaryResponse;
@@ -14,6 +16,7 @@ import com.majungmul.api.global.common.exception.BusinessException;
 import com.majungmul.api.global.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +56,7 @@ public class PostService {
     private final UserRepository userRepository;
     private final CommentRepository commentRepository;
     private final SafetyFilterService safetyFilterService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ─────────────────────────────────────────────────────────────────
     // 게시글 목록 조회
@@ -136,34 +140,31 @@ public class PostService {
         String combinedContent = request.title() + " " + request.content();
         SafetyCheckResult safetyResult = safetyFilterService.check(combinedContent);
 
-        if (safetyResult.crisis()) {
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // [가디언 알림 확장 포인트] — Phase 3에서 구현 예정
-            //
-            // 위기 수준 키워드 감지 시 검증된 또래 상담사(Guardian)에게 즉각 알림을 전송한다.
-            // 고립 청년의 극단적 감정 표출에 빠르게 개입하기 위한 안전망.
-            //
-            // 구현 시 참고:
-            //   1. GuardianAlertService.sendAlert(userId, content) 호출
-            //      - GuardianRepository에서 담당 가디언 조회 (userId 기반 매핑)
-            //      - 알림 전송 실패 시 GUARDIAN_ALERT_FAILED(G002) 예외 처리 고려
-            //   2. 또는 ApplicationEventPublisher로 CrisisDetectedEvent 발행 (도메인 결합도 감소 권장)
-            //      - CrisisDetectedEvent { userId, contentSnapshot, detectedKeywords }
-            //   3. 위기 사용자 ID와 키워드는 별도 감사 로그(audit log)에 저장 권장
-            //      - 단, 원문 내용은 개인정보 처리 방침에 따라 암호화 저장 또는 즉시 파기 고려
-            //
-            // guardianAlertService.sendCrisisAlert(userId, safetyResult.matchedKeywords());
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            log.warn("[Safety] 위기 수준 게시글 감지. userId={}", userId);
-        }
-
+        // ③ 게시글 저장 (위기 감지 여부와 무관하게 차단 처리)
         if (safetyResult.blocked()) {
+            if (safetyResult.crisis()) {
+                // 게시는 차단하되, 위기 이벤트를 발행하여 가디언 알림 트리거
+                // sourceId를 -1로 설정: 게시글이 저장되지 않아 ID가 없는 상태
+                // Phase 4에서 임시 저장 또는 별도 위기 기록 테이블 도입 검토
+                eventPublisher.publishEvent(
+                        new CrisisDetectedEvent(userId, -1L, CrisisSourceType.POST,
+                                safetyResult.matchedKeywords()));
+                log.warn("[Safety] 위기 수준 게시글 차단 및 가디언 알림 발행. userId={}", userId);
+            }
             throw new BusinessException(ErrorCode.POST_BLOCKED_BY_SAFETY);
         }
 
-        // ③ 게시글 저장
         Post post = Post.create(author, request.title(), request.content());
         Post saved = postRepository.save(post);
+
+        if (safetyResult.crisis()) {
+            // 위기 감지되었으나 차단 수준은 아닌 경우 (현재 SafetyCheckResult 설계상 미발생,
+            // 향후 정책 변경 대비 방어 코드로 유지)
+            eventPublisher.publishEvent(
+                    new CrisisDetectedEvent(userId, saved.getId(), CrisisSourceType.POST,
+                            safetyResult.matchedKeywords()));
+            log.warn("[Safety] 위기 수준 게시글 감지 및 가디언 알림 발행. userId={}, postId={}", userId, saved.getId());
+        }
         log.info("[Post] 게시글 작성 완료. postId={}", saved.getId());
 
         return PostResponse.from(saved, userId);
