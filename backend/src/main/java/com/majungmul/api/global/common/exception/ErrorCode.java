@@ -42,6 +42,8 @@ public enum ErrorCode {
     USER_NOT_FOUND       (HttpStatus.NOT_FOUND,    "U001", "존재하지 않는 사용자입니다."),
     EMAIL_DUPLICATED     (HttpStatus.CONFLICT,     "U002", "이미 사용 중인 이메일입니다."),
     NICKNAME_DUPLICATED  (HttpStatus.CONFLICT,     "U003", "이미 사용 중인 닉네임입니다."),
+    /** 포인트 차감 요청 시 보유 잔액이 부족한 경우 */
+    INSUFFICIENT_POINTS  (HttpStatus.BAD_REQUEST,  "U004", "포인트 잔액이 부족합니다."),
 
     // ── Post ──────────────────────────────────────────────────────────
     POST_NOT_FOUND       (HttpStatus.NOT_FOUND,    "P001", "존재하지 않는 게시글입니다."),

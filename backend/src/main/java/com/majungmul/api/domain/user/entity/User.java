@@ -60,6 +60,14 @@ public class User extends BaseTimeEntity {
     private UserRole role;
 
     /**
+     * 보유 포인트.
+     * 미션 완료 시 {@code MissionService → UserService.addPoint()} 경로로 적립된다.
+     * 상품권 교환 등 소비 시 {@code deductPoint()} 로 차감 — 잔액 부족이면 INSUFFICIENT_POINTS 예외.
+     */
+    @Column(name = "point", nullable = false)
+    private int point = 0;
+
+    /**
      * 논리 삭제 플래그.
      * true이면 탈퇴 처리된 계정 — 물리 삭제 없이 데이터를 보존하여 통계·감사 추적에 활용.
      */
@@ -102,6 +110,43 @@ public class User extends BaseTimeEntity {
     public void registerNickname(String nickname) {
         this.nickname = nickname;
         this.role = UserRole.USER;
+    }
+
+    /**
+     * 포인트를 적립한다.
+     *
+     * <p>미션 완료 시 {@code MissionService}가 호출한다.
+     * 음수 amount를 방어하기 위해 검증을 포함한다.
+     *
+     * @param amount 적립할 포인트 (양수)
+     * @throws IllegalArgumentException amount 가 0 이하인 경우
+     */
+    public void addPoint(int amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("적립 포인트는 0보다 커야 합니다.");
+        }
+        this.point += amount;
+    }
+
+    /**
+     * 포인트를 차감한다.
+     *
+     * <p>상품권 교환 등 소비 요청 시 호출된다.
+     * 잔액이 부족하면 호출부에서 INSUFFICIENT_POINTS 예외를 던진다 —
+     * 엔티티는 예외 타입(도메인 레이어 의존)을 직접 알지 않도록 설계.
+     *
+     * @param amount 차감할 포인트 (양수)
+     * @return 차감 후 잔액이 0 이상이면 true, 부족하면 false
+     */
+    public boolean deductPoint(int amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("차감 포인트는 0보다 커야 합니다.");
+        }
+        if (this.point < amount) {
+            return false; // 잔액 부족 — 호출부(UserService)가 INSUFFICIENT_POINTS 예외 처리
+        }
+        this.point -= amount;
+        return true;
     }
 
     /**
